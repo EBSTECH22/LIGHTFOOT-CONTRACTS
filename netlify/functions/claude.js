@@ -1,3 +1,5 @@
+const https = require("https");
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
@@ -9,24 +11,39 @@ exports.handler = async (event) => {
   }
 
   try {
-    const payload = JSON.parse(event.body);
+    const payload = event.body;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify(payload)
+    const data = await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01"
+        }
+      }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => body += chunk);
+        res.on("end", () => {
+          try {
+            resolve({ statusCode: res.statusCode, body });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+
+      req.on("error", reject);
+      req.write(payload);
+      req.end();
     });
 
-    const data = await response.json();
-
     return {
-      statusCode: response.status,
+      statusCode: data.statusCode,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
+      body: data.body
     };
   } catch (err) {
     return {
